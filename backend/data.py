@@ -3,14 +3,18 @@ from typing import Optional
 
 import duckdb
 
-# Use local data files
-DATA_DIR = Path(__file__).parent.parent / "data"
+# Use local data files (resolve to absolute path)
+DATA_DIR = (Path(__file__).parent.parent / "data").resolve()
 DATA_PATH = DATA_DIR / "yellow_tripdata_2024-01.parquet"
 ZONE_LOOKUP_PATH = DATA_DIR / "taxi_zone_lookup.csv"
 
 # Global connection for efficient reuse
 _conn = None
 _zone_lookup = None
+_stats_cache = None
+_pickup_cache = None
+_dropoff_cache = None
+_hourly_cache = None
 
 
 def get_connection() -> duckdb.DuckDBPyConnection:
@@ -19,6 +23,67 @@ def get_connection() -> duckdb.DuckDBPyConnection:
     if _conn is None:
         _conn = duckdb.connect()
     return _conn
+
+
+def init_data():
+    """Initialize data and cache on startup."""
+    global _stats_cache, _pickup_cache, _dropoff_cache, _hourly_cache
+    conn = get_connection()
+
+    # Pre-cache stats
+    result = conn.execute(f"""
+        SELECT
+            COUNT(*) as total_trips,
+            AVG(total_amount) as avg_fare,
+            AVG(CASE WHEN trip_distance > 0 THEN trip_distance END) as avg_distance
+        FROM '{DATA_PATH}'
+    """).fetchone()
+    _stats_cache = {
+        "total_trips": result[0],
+        "avg_fare": round(result[1], 2),
+        "avg_distance": round(result[2], 2)
+    }
+
+    # Pre-cache top pickup zones
+    pickup_result = conn.execute(f"""
+        SELECT
+            t.PULocationID as location_id,
+            z.Zone as zone_name,
+            z.Borough as borough,
+            COUNT(*) as trip_count
+        FROM '{DATA_PATH}' t
+        JOIN '{ZONE_LOOKUP_PATH}' z ON t.PULocationID = z.LocationID
+        GROUP BY t.PULocationID, z.Zone, z.Borough
+        ORDER BY trip_count DESC
+        LIMIT 10
+    """).fetchdf()
+    _pickup_cache = pickup_result.to_dict(orient="records")
+
+    # Pre-cache top dropoff zones
+    dropoff_result = conn.execute(f"""
+        SELECT
+            t.DOLocationID as location_id,
+            z.Zone as zone_name,
+            z.Borough as borough,
+            COUNT(*) as trip_count
+        FROM '{DATA_PATH}' t
+        JOIN '{ZONE_LOOKUP_PATH}' z ON t.DOLocationID = z.LocationID
+        GROUP BY t.DOLocationID, z.Zone, z.Borough
+        ORDER BY trip_count DESC
+        LIMIT 10
+    """).fetchdf()
+    _dropoff_cache = dropoff_result.to_dict(orient="records")
+
+    # Pre-cache hourly trip counts
+    hourly_result = conn.execute(f"""
+        SELECT
+            EXTRACT(HOUR FROM tpep_pickup_datetime) as hour,
+            COUNT(*) as trip_count
+        FROM '{DATA_PATH}'
+        GROUP BY hour
+        ORDER BY hour
+    """).fetchdf()
+    _hourly_cache = hourly_result.to_dict(orient="records")
 
 
 def get_data_info() -> dict:
@@ -79,6 +144,8 @@ def get_zone(location_id: int) -> Optional[dict]:
 
 def get_stats() -> dict:
     """Get summary statistics for the dataset."""
+    if _stats_cache is not None:
+        return _stats_cache
     conn = get_connection()
     result = conn.execute(f"""
         SELECT
@@ -96,6 +163,8 @@ def get_stats() -> dict:
 
 def get_top_pickup_zones(limit: int = 10) -> list[dict]:
     """Get top pickup zones by trip count."""
+    if _pickup_cache is not None and limit == 10:
+        return _pickup_cache
     conn = get_connection()
     result = conn.execute(f"""
         SELECT
@@ -108,5 +177,41 @@ def get_top_pickup_zones(limit: int = 10) -> list[dict]:
         GROUP BY t.PULocationID, z.Zone, z.Borough
         ORDER BY trip_count DESC
         LIMIT {limit}
+    """).fetchdf()
+    return result.to_dict(orient="records")
+
+
+def get_top_dropoff_zones(limit: int = 10) -> list[dict]:
+    """Get top dropoff zones by trip count."""
+    if _dropoff_cache is not None and limit == 10:
+        return _dropoff_cache
+    conn = get_connection()
+    result = conn.execute(f"""
+        SELECT
+            t.DOLocationID as location_id,
+            z.Zone as zone_name,
+            z.Borough as borough,
+            COUNT(*) as trip_count
+        FROM '{DATA_PATH}' t
+        JOIN '{ZONE_LOOKUP_PATH}' z ON t.DOLocationID = z.LocationID
+        GROUP BY t.DOLocationID, z.Zone, z.Borough
+        ORDER BY trip_count DESC
+        LIMIT {limit}
+    """).fetchdf()
+    return result.to_dict(orient="records")
+
+
+def get_hourly_trips() -> list[dict]:
+    """Get trip counts by hour of day."""
+    if _hourly_cache is not None:
+        return _hourly_cache
+    conn = get_connection()
+    result = conn.execute(f"""
+        SELECT
+            EXTRACT(HOUR FROM tpep_pickup_datetime) as hour,
+            COUNT(*) as trip_count
+        FROM '{DATA_PATH}'
+        GROUP BY hour
+        ORDER BY hour
     """).fetchdf()
     return result.to_dict(orient="records")

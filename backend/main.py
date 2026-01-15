@@ -1,9 +1,22 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from data import get_data_info, get_stats, get_top_pickup_zones
+from data import get_data_info, get_stats, get_top_pickup_zones, get_top_dropoff_zones, get_hourly_trips, init_data
 
-app = FastAPI(title="NYC Taxi Analytics API")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: pre-load and cache data
+    print("Initializing data cache...")
+    init_data()
+    print("Data cache ready!")
+    yield
+    # Shutdown: nothing to clean up
+
+
+app = FastAPI(title="NYC Taxi Analytics API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -40,3 +53,15 @@ def stats():
 def top_pickup_zones():
     """Get top 10 pickup zones by trip count."""
     return get_top_pickup_zones()
+
+
+@app.get("/top-dropoff-zones")
+def top_dropoff_zones():
+    """Get top 10 dropoff zones by trip count."""
+    return get_top_dropoff_zones()
+
+
+@app.get("/hourly-trips")
+def hourly_trips():
+    """Get trip counts by hour of day."""
+    return get_hourly_trips()

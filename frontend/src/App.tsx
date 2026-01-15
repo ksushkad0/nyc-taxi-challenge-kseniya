@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import './App.css'
 
 const API_URL = 'http://localhost:8000'
@@ -9,26 +10,37 @@ interface Stats {
   avg_distance: number
 }
 
-interface PickupZone {
+interface Zone {
   location_id: number
   zone_name: string
   borough: string
   trip_count: number
 }
 
+interface HourlyData {
+  hour: number
+  trip_count: number
+}
+
 function App() {
   const [stats, setStats] = useState<Stats | null>(null)
-  const [topPickupZones, setTopPickupZones] = useState<PickupZone[]>([])
+  const [topPickupZones, setTopPickupZones] = useState<Zone[]>([])
+  const [topDropoffZones, setTopDropoffZones] = useState<Zone[]>([])
+  const [hourlyTrips, setHourlyTrips] = useState<HourlyData[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     Promise.all([
       fetch(`${API_URL}/stats`).then(res => res.json()),
-      fetch(`${API_URL}/top-pickup-zones`).then(res => res.json())
+      fetch(`${API_URL}/top-pickup-zones`).then(res => res.json()),
+      fetch(`${API_URL}/top-dropoff-zones`).then(res => res.json()),
+      fetch(`${API_URL}/hourly-trips`).then(res => res.json())
     ])
-      .then(([statsData, zonesData]) => {
+      .then(([statsData, pickupData, dropoffData, hourlyData]) => {
         setStats(statsData)
-        setTopPickupZones(zonesData)
+        setTopPickupZones(pickupData)
+        setTopDropoffZones(dropoffData)
+        setHourlyTrips(hourlyData)
         setLoading(false)
       })
       .catch(err => {
@@ -71,6 +83,31 @@ function App() {
       </div>
 
       <div className="section">
+        <h2>Trips by Hour of Day</h2>
+        {loading ? (
+          <p>Loading...</p>
+        ) : (
+          <div className="chart-container">
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={hourlyTrips}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis
+                  dataKey="hour"
+                  tickFormatter={(hour) => `${hour}:00`}
+                />
+                <YAxis tickFormatter={(value) => value.toLocaleString()} />
+                <Tooltip
+                  formatter={(value) => [Number(value).toLocaleString(), 'Trips']}
+                  labelFormatter={(hour) => `Hour: ${hour}:00`}
+                />
+                <Bar dataKey="trip_count" fill="#2563eb" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </div>
+
+      <div className="section">
         <h2>Top 10 Pickup Zones</h2>
         {loading ? (
           <p>Loading...</p>
@@ -86,6 +123,34 @@ function App() {
             </thead>
             <tbody>
               {topPickupZones.map((zone, index) => (
+                <tr key={zone.location_id}>
+                  <td>{index + 1}</td>
+                  <td>{zone.zone_name}</td>
+                  <td>{zone.borough}</td>
+                  <td>{formatNumber(zone.trip_count)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <div className="section">
+        <h2>Top 10 Dropoff Zones</h2>
+        {loading ? (
+          <p>Loading...</p>
+        ) : (
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Zone</th>
+                <th>Borough</th>
+                <th>Trips</th>
+              </tr>
+            </thead>
+            <tbody>
+              {topDropoffZones.map((zone, index) => (
                 <tr key={zone.location_id}>
                   <td>{index + 1}</td>
                   <td>{zone.zone_name}</td>
