@@ -1,9 +1,13 @@
+from typing import Optional
+
 import duckdb
 
 DATA_URL = "https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2024-01.parquet"
+ZONE_LOOKUP_URL = "https://d37ci6vzurychx.cloudfront.net/misc/taxi_zone_lookup.csv"
 
 # Global connection for efficient reuse
 _conn = None
+_zone_lookup = None
 
 
 def get_connection() -> duckdb.DuckDBPyConnection:
@@ -45,3 +49,26 @@ def query(sql: str) -> list[dict]:
     conn = get_connection()
     result = conn.execute(sql).fetchdf()
     return result.to_dict(orient="records")
+
+
+def get_zone_lookup() -> dict[int, dict]:
+    """Load and cache zone lookup data."""
+    global _zone_lookup
+    if _zone_lookup is None:
+        conn = get_connection()
+        zones = conn.execute(f"SELECT * FROM '{ZONE_LOOKUP_URL}'").fetchdf()
+        _zone_lookup = {
+            int(row["LocationID"]): {
+                "borough": row["Borough"],
+                "zone": row["Zone"],
+                "service_zone": row["service_zone"]
+            }
+            for _, row in zones.iterrows()
+        }
+    return _zone_lookup
+
+
+def get_zone(location_id: int) -> Optional[dict]:
+    """Map a LocationID to its Borough and Zone name."""
+    lookup = get_zone_lookup()
+    return lookup.get(location_id)
