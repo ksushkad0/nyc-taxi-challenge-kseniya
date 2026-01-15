@@ -58,44 +58,126 @@ Good luck!
 ## Project Setup
 
 ### Tech Stack
-- **Backend**: Python + FastAPI + DuckDB
-- **Frontend**: React + TypeScript + Vite
+- **Backend**: Python 3.11+ / FastAPI / DuckDB
+- **Frontend**: React 18 / TypeScript / Vite / Recharts / Leaflet
+- **Data**: NYC Yellow Taxi Trip Data (Parquet format)
 
 ### Folder Structure
 ```
-├── backend/          # FastAPI backend
-│   ├── main.py       # API entry point
-│   └── requirements.txt
-├── frontend/         # React frontend
+├── backend/
+│   ├── main.py           # FastAPI application & API routes
+│   ├── data.py           # DuckDB queries & data caching
+│   └── requirements.txt  # Python dependencies
+├── frontend/
 │   ├── src/
-│   └── package.json
-├── venv/             # Python virtual environment
-└── DATA.md           # Data documentation
+│   │   ├── App.tsx       # Main dashboard component
+│   │   ├── App.css       # Dashboard styles
+│   │   └── ZoneMap.tsx   # Choropleth map component
+│   └── package.json      # Node dependencies
+├── data/                 # Local data files (gitignored)
+│   ├── yellow_tripdata_2024-01.parquet
+│   └── taxi_zone_lookup.csv
+├── venv/                 # Python virtual environment
+└── DATA.md               # Data documentation
 ```
+
+### Prerequisites
+
+1. **Download the data files** and place them in the `data/` folder:
+   - [yellow_tripdata_2024-01.parquet](https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2024-01.parquet)
+   - [taxi_zone_lookup.csv](https://d37ci6vzurychx.cloudfront.net/misc/taxi_zone_lookup.csv)
 
 ### Quick Start
 
-**1. Backend**
+**1. Start the Backend**
 ```bash
 # Activate virtual environment
 source venv/bin/activate
 
-# Install dependencies (if needed)
+# Install dependencies (first time only)
 pip install -r backend/requirements.txt
 
 # Run the API server
 cd backend
 uvicorn main:app --reload --port 8000
 ```
-API will be available at http://localhost:8000
+API available at: http://localhost:8000
 
-**2. Frontend**
+**2. Start the Frontend**
 ```bash
-# Install dependencies (if needed)
+# Install dependencies (first time only)
 cd frontend
 npm install
 
 # Run development server
 npm run dev
 ```
-App will be available at http://localhost:5173
+Dashboard available at: http://localhost:5173
+
+---
+
+## Implemented Features
+
+### Dashboard Statistics
+- **Total Trips** - Count of all taxi trips
+- **Average Fare** - Mean fare amount
+- **Average Distance** - Mean trip distance in miles
+- **Average Tip %** - Mean tip as percentage of fare (credit card only)
+
+### Visualizations
+
+| Feature | Description |
+|---------|-------------|
+| **Trips by Hour** | Bar chart showing trip volume across 24 hours |
+| **Trips by Day** | Bar chart with weekday/weekend color distinction |
+| **Payment Methods** | Pie chart showing credit card vs cash breakdown |
+| **Tip by Borough** | Horizontal bar chart comparing tip % across boroughs |
+| **Pickup Heatmap** | Hour x Day grid showing pickup patterns |
+| **Zone Choropleth** | Interactive map with zones colored by pickup volume |
+| **Top Pickup Zones** | Table of 10 busiest pickup locations |
+| **Top Dropoff Zones** | Table of 10 busiest dropoff locations |
+
+### Technical Features
+- **DuckDB Integration** - Fast SQL queries on Parquet data
+- **Data Caching** - All queries pre-computed on server startup
+- **Responsive Design** - Works on desktop and tablet
+- **Interactive Tooltips** - Hover for detailed information
+
+---
+
+## API Endpoints
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /` | Health check |
+| `GET /stats` | Summary statistics (trips, fare, distance) |
+| `GET /top-pickup-zones` | Top 10 pickup zones by trip count |
+| `GET /top-dropoff-zones` | Top 10 dropoff zones by trip count |
+| `GET /hourly-trips` | Trip counts by hour (0-23) |
+| `GET /daily-trips` | Trip counts by day of week |
+| `GET /payment-breakdown` | Trip counts by payment type |
+| `GET /heatmap` | Trip counts by hour and day for heatmap |
+| `GET /tip-stats` | Average tip percentage (credit card only) |
+| `GET /tip-by-borough` | Average tip percentage by borough |
+| `GET /zone-pickups` | All zones with pickup counts for map |
+
+---
+
+## Development
+
+### Build for Production
+```bash
+# Frontend
+cd frontend
+npm run build
+# Output in frontend/dist/
+
+# Backend (run with production server)
+cd backend
+uvicorn main:app --host 0.0.0.0 --port 8000
+```
+
+### Environment
+- Python 3.11+
+- Node.js 18+
+- ~3M taxi trips in January 2024 dataset

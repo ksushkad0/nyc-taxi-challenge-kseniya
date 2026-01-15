@@ -1,8 +1,7 @@
-import { useEffect, useState, useMemo } from 'react'
-import { MapContainer, TileLayer, GeoJSON } from 'react-leaflet'
+import { useEffect, useState, useMemo, Component } from 'react'
+import type { ReactNode } from 'react'
 import type { Feature, FeatureCollection, Geometry } from 'geojson'
 import type { PathOptions, Layer } from 'leaflet'
-import 'leaflet/dist/leaflet.css'
 
 const NYC_ZONES_GEOJSON_URL = 'https://data.cityofnewyork.us/api/geospatial/d3c5-ddgc?method=export&format=GeoJSON'
 
@@ -26,9 +25,70 @@ interface ZoneProperties {
   [key: string]: unknown
 }
 
-export default function ZoneMap({ zonePickups, loading }: ZoneMapProps) {
+// Error boundary to catch Leaflet errors
+class MapErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
+  constructor(props: { children: ReactNode }) {
+    super(props)
+    this.state = { hasError: false }
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true }
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error('Map error:', error, errorInfo)
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="map-error">
+          Unable to load map. Please refresh the page.
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
+
+function ZoneMapInner({ zonePickups, loading }: ZoneMapProps) {
   const [geoData, setGeoData] = useState<FeatureCollection | null>(null)
   const [geoLoading, setGeoLoading] = useState(true)
+  const [mounted, setMounted] = useState(false)
+  const [MapComponents, setMapComponents] = useState<{
+    MapContainer: typeof import('react-leaflet').MapContainer
+    TileLayer: typeof import('react-leaflet').TileLayer
+    GeoJSON: typeof import('react-leaflet').GeoJSON
+  } | null>(null)
+
+  // Load Leaflet components only on client side
+  useEffect(() => {
+    setMounted(true)
+
+    // Dynamically import react-leaflet to avoid SSR issues
+    Promise.all([
+      import('leaflet'),
+      import('react-leaflet'),
+      import('leaflet/dist/leaflet.css')
+    ]).then(([L, reactLeaflet]) => {
+      // Fix Leaflet default icon issue with bundlers
+      delete (L.default.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl
+      L.default.Icon.Default.mergeOptions({
+        iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
+        iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
+        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+      })
+
+      setMapComponents({
+        MapContainer: reactLeaflet.MapContainer,
+        TileLayer: reactLeaflet.TileLayer,
+        GeoJSON: reactLeaflet.GeoJSON,
+      })
+    }).catch(err => {
+      console.error('Failed to load map components:', err)
+    })
+  }, [])
 
   // Fetch GeoJSON data
   useEffect(() => {
@@ -63,7 +123,6 @@ export default function ZoneMap({ zonePickups, loading }: ZoneMapProps) {
   const getColor = (tripCount: number): string => {
     if (tripCount === 0) return '#f0f0f0'
     const ratio = tripCount / maxTripCount
-    // Color gradient from light yellow (#ffffcc) to dark red (#800026)
     if (ratio > 0.8) return '#800026'
     if (ratio > 0.6) return '#bd0026'
     if (ratio > 0.4) return '#e31a1c'
@@ -111,13 +170,15 @@ export default function ZoneMap({ zonePickups, loading }: ZoneMapProps) {
     }
   }
 
-  if (loading || geoLoading) {
+  if (!mounted || loading || geoLoading || !MapComponents) {
     return <div className="map-loading">Loading map data...</div>
   }
 
   if (!geoData) {
     return <div className="map-error">Failed to load map geometry</div>
   }
+
+  const { MapContainer, TileLayer, GeoJSON } = MapComponents
 
   return (
     <div className="zone-map-wrapper">
@@ -156,5 +217,13 @@ export default function ZoneMap({ zonePickups, loading }: ZoneMapProps) {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function ZoneMap(props: ZoneMapProps) {
+  return (
+    <MapErrorBoundary>
+      <ZoneMapInner {...props} />
+    </MapErrorBoundary>
   )
 }
