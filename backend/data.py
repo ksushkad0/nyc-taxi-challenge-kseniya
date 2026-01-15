@@ -15,6 +15,7 @@ _stats_cache = None
 _pickup_cache = None
 _dropoff_cache = None
 _hourly_cache = None
+_daily_cache = None
 
 
 def get_connection() -> duckdb.DuckDBPyConnection:
@@ -27,7 +28,7 @@ def get_connection() -> duckdb.DuckDBPyConnection:
 
 def init_data():
     """Initialize data and cache on startup."""
-    global _stats_cache, _pickup_cache, _dropoff_cache, _hourly_cache
+    global _stats_cache, _pickup_cache, _dropoff_cache, _hourly_cache, _daily_cache
     conn = get_connection()
 
     # Pre-cache stats
@@ -84,6 +85,17 @@ def init_data():
         ORDER BY hour
     """).fetchdf()
     _hourly_cache = hourly_result.to_dict(orient="records")
+
+    # Pre-cache daily trip counts (by day of week)
+    daily_result = conn.execute(f"""
+        SELECT
+            EXTRACT(DAYOFWEEK FROM tpep_pickup_datetime) as day_of_week,
+            COUNT(*) as trip_count
+        FROM '{DATA_PATH}'
+        GROUP BY day_of_week
+        ORDER BY day_of_week
+    """).fetchdf()
+    _daily_cache = daily_result.to_dict(orient="records")
 
 
 def get_data_info() -> dict:
@@ -213,5 +225,21 @@ def get_hourly_trips() -> list[dict]:
         FROM '{DATA_PATH}'
         GROUP BY hour
         ORDER BY hour
+    """).fetchdf()
+    return result.to_dict(orient="records")
+
+
+def get_daily_trips() -> list[dict]:
+    """Get trip counts by day of week."""
+    if _daily_cache is not None:
+        return _daily_cache
+    conn = get_connection()
+    result = conn.execute(f"""
+        SELECT
+            EXTRACT(DAYOFWEEK FROM tpep_pickup_datetime) as day_of_week,
+            COUNT(*) as trip_count
+        FROM '{DATA_PATH}'
+        GROUP BY day_of_week
+        ORDER BY day_of_week
     """).fetchdf()
     return result.to_dict(orient="records")

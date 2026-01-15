@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 import './App.css'
 
 const API_URL = 'http://localhost:8000'
@@ -22,25 +22,35 @@ interface HourlyData {
   trip_count: number
 }
 
+interface DailyData {
+  day_of_week: number
+  trip_count: number
+}
+
 function App() {
   const [stats, setStats] = useState<Stats | null>(null)
   const [topPickupZones, setTopPickupZones] = useState<Zone[]>([])
   const [topDropoffZones, setTopDropoffZones] = useState<Zone[]>([])
   const [hourlyTrips, setHourlyTrips] = useState<HourlyData[]>([])
+  const [dailyTrips, setDailyTrips] = useState<DailyData[]>([])
   const [loading, setLoading] = useState(true)
+
+  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
   useEffect(() => {
     Promise.all([
       fetch(`${API_URL}/stats`).then(res => res.json()),
       fetch(`${API_URL}/top-pickup-zones`).then(res => res.json()),
       fetch(`${API_URL}/top-dropoff-zones`).then(res => res.json()),
-      fetch(`${API_URL}/hourly-trips`).then(res => res.json())
+      fetch(`${API_URL}/hourly-trips`).then(res => res.json()),
+      fetch(`${API_URL}/daily-trips`).then(res => res.json())
     ])
-      .then(([statsData, pickupData, dropoffData, hourlyData]) => {
+      .then(([statsData, pickupData, dropoffData, hourlyData, dailyData]) => {
         setStats(statsData)
         setTopPickupZones(pickupData)
         setTopDropoffZones(dropoffData)
         setHourlyTrips(hourlyData)
+        setDailyTrips(dailyData)
         setLoading(false)
       })
       .catch(err => {
@@ -103,6 +113,42 @@ function App() {
                 <Bar dataKey="trip_count" fill="#2563eb" />
               </BarChart>
             </ResponsiveContainer>
+          </div>
+        )}
+      </div>
+
+      <div className="section">
+        <h2>Trips by Day of Week</h2>
+        {loading ? (
+          <p>Loading...</p>
+        ) : (
+          <div className="chart-container">
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={dailyTrips}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis
+                  dataKey="day_of_week"
+                  tickFormatter={(day) => dayNames[day]}
+                />
+                <YAxis tickFormatter={(value) => value.toLocaleString()} />
+                <Tooltip
+                  formatter={(value) => [Number(value).toLocaleString(), 'Trips']}
+                  labelFormatter={(day) => dayNames[Number(day)]}
+                />
+                <Bar dataKey="trip_count">
+                  {dailyTrips.map((entry) => (
+                    <Cell
+                      key={entry.day_of_week}
+                      fill={entry.day_of_week === 0 || entry.day_of_week === 6 ? '#f59e0b' : '#2563eb'}
+                    />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+            <div className="chart-legend">
+              <span className="legend-item"><span className="legend-color weekday"></span> Weekday</span>
+              <span className="legend-item"><span className="legend-color weekend"></span> Weekend</span>
+            </div>
           </div>
         )}
       </div>
