@@ -16,6 +16,16 @@ _pickup_cache = None
 _dropoff_cache = None
 _hourly_cache = None
 _daily_cache = None
+_payment_cache = None
+
+PAYMENT_TYPES = {
+    1: "Credit Card",
+    2: "Cash",
+    3: "No Charge",
+    4: "Dispute",
+    5: "Unknown",
+    6: "Voided"
+}
 
 
 def get_connection() -> duckdb.DuckDBPyConnection:
@@ -28,7 +38,7 @@ def get_connection() -> duckdb.DuckDBPyConnection:
 
 def init_data():
     """Initialize data and cache on startup."""
-    global _stats_cache, _pickup_cache, _dropoff_cache, _hourly_cache, _daily_cache
+    global _stats_cache, _pickup_cache, _dropoff_cache, _hourly_cache, _daily_cache, _payment_cache
     conn = get_connection()
 
     # Pre-cache stats
@@ -96,6 +106,25 @@ def init_data():
         ORDER BY day_of_week
     """).fetchdf()
     _daily_cache = daily_result.to_dict(orient="records")
+
+    # Pre-cache payment type breakdown
+    payment_result = conn.execute(f"""
+        SELECT
+            payment_type,
+            COUNT(*) as trip_count
+        FROM '{DATA_PATH}'
+        GROUP BY payment_type
+        ORDER BY trip_count DESC
+    """).fetchdf()
+    payment_data = payment_result.to_dict(orient="records")
+    _payment_cache = [
+        {
+            "payment_type": row["payment_type"],
+            "payment_name": PAYMENT_TYPES.get(int(row["payment_type"]), "Other"),
+            "trip_count": row["trip_count"]
+        }
+        for row in payment_data
+    ]
 
 
 def get_data_info() -> dict:
@@ -243,3 +272,27 @@ def get_daily_trips() -> list[dict]:
         ORDER BY day_of_week
     """).fetchdf()
     return result.to_dict(orient="records")
+
+
+def get_payment_breakdown() -> list[dict]:
+    """Get trip counts by payment type."""
+    if _payment_cache is not None:
+        return _payment_cache
+    conn = get_connection()
+    result = conn.execute(f"""
+        SELECT
+            payment_type,
+            COUNT(*) as trip_count
+        FROM '{DATA_PATH}'
+        GROUP BY payment_type
+        ORDER BY trip_count DESC
+    """).fetchdf()
+    payment_data = result.to_dict(orient="records")
+    return [
+        {
+            "payment_type": row["payment_type"],
+            "payment_name": PAYMENT_TYPES.get(int(row["payment_type"]), "Other"),
+            "trip_count": row["trip_count"]
+        }
+        for row in payment_data
+    ]

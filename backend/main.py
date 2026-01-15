@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from data import get_data_info, get_stats, get_top_pickup_zones, get_top_dropoff_zones, get_hourly_trips, get_daily_trips, init_data
+from data import get_data_info, get_stats, get_top_pickup_zones, get_top_dropoff_zones, get_hourly_trips, get_daily_trips, get_payment_breakdown, init_data
 
 
 @asynccontextmanager
@@ -71,3 +71,9 @@ def hourly_trips():
 def daily_trips():
     """Get trip counts by day of week."""
     return get_daily_trips()
+
+
+@app.get("/payment-breakdown")
+def payment_breakdown():
+    """Get trip counts by payment type."""
+    return get_payment_breakdown()

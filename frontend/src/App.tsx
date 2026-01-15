@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie } from 'recharts'
 import './App.css'
 
 const API_URL = 'http://localhost:8000'
@@ -27,15 +27,23 @@ interface DailyData {
   trip_count: number
 }
 
+interface PaymentData {
+  payment_type: number
+  payment_name: string
+  trip_count: number
+}
+
 function App() {
   const [stats, setStats] = useState<Stats | null>(null)
   const [topPickupZones, setTopPickupZones] = useState<Zone[]>([])
   const [topDropoffZones, setTopDropoffZones] = useState<Zone[]>([])
   const [hourlyTrips, setHourlyTrips] = useState<HourlyData[]>([])
   const [dailyTrips, setDailyTrips] = useState<DailyData[]>([])
+  const [paymentBreakdown, setPaymentBreakdown] = useState<PaymentData[]>([])
   const [loading, setLoading] = useState(true)
 
   const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+  const PAYMENT_COLORS = ['#2563eb', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#6b7280']
 
   useEffect(() => {
     Promise.all([
@@ -43,14 +51,16 @@ function App() {
       fetch(`${API_URL}/top-pickup-zones`).then(res => res.json()),
       fetch(`${API_URL}/top-dropoff-zones`).then(res => res.json()),
       fetch(`${API_URL}/hourly-trips`).then(res => res.json()),
-      fetch(`${API_URL}/daily-trips`).then(res => res.json())
+      fetch(`${API_URL}/daily-trips`).then(res => res.json()),
+      fetch(`${API_URL}/payment-breakdown`).then(res => res.json())
     ])
-      .then(([statsData, pickupData, dropoffData, hourlyData, dailyData]) => {
+      .then(([statsData, pickupData, dropoffData, hourlyData, dailyData, paymentData]) => {
         setStats(statsData)
         setTopPickupZones(pickupData)
         setTopDropoffZones(dropoffData)
         setHourlyTrips(hourlyData)
         setDailyTrips(dailyData)
+        setPaymentBreakdown(paymentData)
         setLoading(false)
       })
       .catch(err => {
@@ -148,6 +158,49 @@ function App() {
             <div className="chart-legend">
               <span className="legend-item"><span className="legend-color weekday"></span> Weekday</span>
               <span className="legend-item"><span className="legend-color weekend"></span> Weekend</span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="section">
+        <h2>Payment Methods</h2>
+        {loading ? (
+          <p>Loading...</p>
+        ) : (
+          <div className="payment-container">
+            <div className="chart-container">
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={paymentBreakdown as unknown as Record<string, unknown>[]}
+                    dataKey="trip_count"
+                    nameKey="payment_name"
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={100}
+                    label={({ name, percent }) => `${name} (${((percent || 0) * 100).toFixed(1)}%)`}
+                  >
+                    {paymentBreakdown.map((_, index) => (
+                      <Cell key={index} fill={PAYMENT_COLORS[index % PAYMENT_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(value) => [Number(value).toLocaleString(), 'Trips']} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="payment-legend">
+              {paymentBreakdown.map((item, index) => {
+                const total = paymentBreakdown.reduce((sum, p) => sum + p.trip_count, 0)
+                const percent = ((item.trip_count / total) * 100).toFixed(1)
+                return (
+                  <div key={item.payment_type} className="payment-legend-item">
+                    <span className="legend-color" style={{ background: PAYMENT_COLORS[index % PAYMENT_COLORS.length] }}></span>
+                    <span className="payment-name">{item.payment_name}</span>
+                    <span className="payment-count">{item.trip_count.toLocaleString()} ({percent}%)</span>
+                  </div>
+                )
+              })}
             </div>
           </div>
         )}
