@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from data import get_data_info, get_stats
+from data import get_data_info, get_stats, get_top_pickup_zones
 
 app = FastAPI(title="NYC Taxi Analytics API")
 
@@ -34,3 +34,9 @@ def data_info():
 def stats():
     """Get summary statistics."""
     return get_stats()
+
+
+@app.get("/top-pickup-zones")
+def top_pickup_zones():
+    """Get top 10 pickup zones by trip count."""
+    return get_top_pickup_zones()
