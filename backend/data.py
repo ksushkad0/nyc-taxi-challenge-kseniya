@@ -80,10 +80,12 @@ def get_stats() -> dict:
     result = conn.execute(f"""
         SELECT
             COUNT(*) as total_trips,
-            AVG(total_amount) as avg_fare
+            AVG(total_amount) as avg_fare,
+            AVG(CASE WHEN trip_distance > 0 THEN trip_distance END) as avg_distance
         FROM '{DATA_URL}'
     """).fetchone()
     return {
         "total_trips": result[0],
-        "avg_fare": round(result[1], 2)
+        "avg_fare": round(result[1], 2),
+        "avg_distance": round(result[2], 2)
     }

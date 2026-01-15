@@ -6,6 +6,7 @@ const API_URL = 'http://localhost:8000'
 interface Stats {
   total_trips: number
   avg_fare: number
+  avg_distance: number
 }
 
 function App() {
@@ -48,6 +49,12 @@ function App() {
           <h3>Average Fare</h3>
           <p className="stat-value">
             {loading ? 'Loading...' : stats ? formatCurrency(stats.avg_fare) : 'Error'}
+          </p>
+        </div>
+        <div className="stat-card">
+          <h3>Average Distance</h3>
+          <p className="stat-value">
+            {loading ? 'Loading...' : stats ? `${stats.avg_distance} mi` : 'Error'}
           </p>
         </div>
       </div>
