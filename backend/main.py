@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from data import get_data_info, get_stats, get_top_pickup_zones, get_top_dropoff_zones, get_hourly_trips, get_daily_trips, get_payment_breakdown, init_data
+from data import get_data_info, get_stats, get_top_pickup_zones, get_top_dropoff_zones, get_hourly_trips, get_daily_trips, get_payment_breakdown, get_heatmap_data, get_tip_stats, get_tip_by_borough, get_zone_pickups, init_data
 
 
 @asynccontextmanager
@@ -77,3 +77,27 @@ def daily_trips():
 def payment_breakdown():
     """Get trip counts by payment type."""
     return get_payment_breakdown()
+
+
+@app.get("/heatmap")
+def heatmap():
+    """Get trip counts by hour and day of week for heatmap."""
+    return get_heatmap_data()
+
+
+@app.get("/tip-stats")
+def tip_stats():
+    """Get average tip percentage for credit card payments."""
+    return get_tip_stats()
+
+
+@app.get("/tip-by-borough")
+def tip_by_borough():
+    """Get average tip percentage by borough."""
+    return get_tip_by_borough()
+
+
+@app.get("/zone-pickups")
+def zone_pickups():
+    """Get pickup counts for all zones (for choropleth map)."""
+    return get_zone_pickups()

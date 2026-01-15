@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie } from 'recharts'
+import ZoneMap from './ZoneMap'
 import './App.css'
 
 const API_URL = 'http://localhost:8000'
@@ -33,6 +34,23 @@ interface PaymentData {
   trip_count: number
 }
 
+interface HeatmapData {
+  day_of_week: number
+  hour: number
+  trip_count: number
+}
+
+interface TipStats {
+  avg_tip_percentage: number
+  trip_count: number
+}
+
+interface TipByBorough {
+  borough: string
+  avg_tip_percentage: number
+  trip_count: number
+}
+
 function App() {
   const [stats, setStats] = useState<Stats | null>(null)
   const [topPickupZones, setTopPickupZones] = useState<Zone[]>([])
@@ -40,6 +58,10 @@ function App() {
   const [hourlyTrips, setHourlyTrips] = useState<HourlyData[]>([])
   const [dailyTrips, setDailyTrips] = useState<DailyData[]>([])
   const [paymentBreakdown, setPaymentBreakdown] = useState<PaymentData[]>([])
+  const [heatmapData, setHeatmapData] = useState<HeatmapData[]>([])
+  const [tipStats, setTipStats] = useState<TipStats | null>(null)
+  const [tipByBorough, setTipByBorough] = useState<TipByBorough[]>([])
+  const [zonePickups, setZonePickups] = useState<Zone[]>([])
   const [loading, setLoading] = useState(true)
 
   const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -52,15 +74,23 @@ function App() {
       fetch(`${API_URL}/top-dropoff-zones`).then(res => res.json()),
       fetch(`${API_URL}/hourly-trips`).then(res => res.json()),
       fetch(`${API_URL}/daily-trips`).then(res => res.json()),
-      fetch(`${API_URL}/payment-breakdown`).then(res => res.json())
+      fetch(`${API_URL}/payment-breakdown`).then(res => res.json()),
+      fetch(`${API_URL}/heatmap`).then(res => res.json()),
+      fetch(`${API_URL}/tip-stats`).then(res => res.json()),
+      fetch(`${API_URL}/tip-by-borough`).then(res => res.json()),
+      fetch(`${API_URL}/zone-pickups`).then(res => res.json())
     ])
-      .then(([statsData, pickupData, dropoffData, hourlyData, dailyData, paymentData]) => {
+      .then(([statsData, pickupData, dropoffData, hourlyData, dailyData, paymentData, heatmapResult, tipStatsData, tipBoroughData, zonePickupsData]) => {
         setStats(statsData)
         setTopPickupZones(pickupData)
         setTopDropoffZones(dropoffData)
         setHourlyTrips(hourlyData)
         setDailyTrips(dailyData)
         setPaymentBreakdown(paymentData)
+        setHeatmapData(heatmapResult)
+        setTipStats(tipStatsData)
+        setTipByBorough(tipBoroughData)
+        setZonePickups(zonePickupsData)
         setLoading(false)
       })
       .catch(err => {
@@ -99,6 +129,13 @@ function App() {
           <p className="stat-value">
             {loading ? 'Loading...' : stats ? `${stats.avg_distance} mi` : 'Error'}
           </p>
+        </div>
+        <div className="stat-card">
+          <h3>Average Tip</h3>
+          <p className="stat-value">
+            {loading ? 'Loading...' : tipStats ? `${tipStats.avg_tip_percentage}%` : 'Error'}
+          </p>
+          <p className="stat-note">Credit card payments only</p>
         </div>
       </div>
 
@@ -204,6 +241,100 @@ function App() {
             </div>
           </div>
         )}
+      </div>
+
+      <div className="section">
+        <h2>Average Tip by Borough</h2>
+        <p className="chart-subtitle">Credit card payments only (excludes tips &gt; 100% of fare)</p>
+        {loading ? (
+          <p>Loading...</p>
+        ) : (
+          <div className="chart-container">
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={tipByBorough} layout="vertical">
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis
+                  type="number"
+                  domain={[0, 'auto']}
+                  tickFormatter={(value) => `${value}%`}
+                />
+                <YAxis
+                  type="category"
+                  dataKey="borough"
+                  width={100}
+                />
+                <Tooltip
+                  formatter={(value) => [`${Number(value).toFixed(1)}%`, 'Avg Tip']}
+                />
+                <Bar dataKey="avg_tip_percentage" fill="#10b981" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </div>
+
+      <div className="section">
+        <h2>Pickup Patterns Heatmap</h2>
+        <p className="heatmap-subtitle">Trip volume by hour and day of week</p>
+        {loading ? (
+          <p>Loading...</p>
+        ) : (
+          <div className="heatmap-container">
+            <div className="heatmap-wrapper">
+              <div className="heatmap-y-labels">
+                {dayNames.map((day, index) => (
+                  <div key={index} className="heatmap-y-label">{day}</div>
+                ))}
+              </div>
+              <div className="heatmap-main">
+                <div className="heatmap-grid">
+                  {dayNames.map((_, dayIndex) => {
+                    const maxCount = Math.max(...heatmapData.map(d => d.trip_count))
+                    return (
+                      <div key={dayIndex} className="heatmap-row">
+                        {Array.from({ length: 24 }, (_, hour) => {
+                          const cell = heatmapData.find(
+                            d => d.day_of_week === dayIndex && d.hour === hour
+                          )
+                          const count = cell?.trip_count || 0
+                          const intensity = maxCount > 0 ? count / maxCount : 0
+                          return (
+                            <div
+                              key={hour}
+                              className="heatmap-cell"
+                              style={{
+                                backgroundColor: `rgba(37, 99, 235, ${intensity * 0.9 + 0.1})`
+                              }}
+                              title={`${dayNames[dayIndex]} ${hour}:00 - ${count.toLocaleString()} trips`}
+                            />
+                          )
+                        })}
+                      </div>
+                    )
+                  })}
+                </div>
+                <div className="heatmap-x-labels">
+                  {Array.from({ length: 24 }, (_, hour) => (
+                    <div key={hour} className="heatmap-x-label">
+                      {hour % 3 === 0 ? `${hour}` : ''}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="heatmap-legend">
+              <span>Low</span>
+              <div className="heatmap-legend-gradient"></div>
+              <span>High</span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="section">
+        <h2>Pickup Volume by Zone</h2>
+        <p className="chart-subtitle">Hover over zones to see details</p>
+        <ZoneMap zonePickups={zonePickups} loading={loading} />
       </div>
 
       <div className="section">

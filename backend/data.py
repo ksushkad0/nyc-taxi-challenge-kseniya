@@ -17,6 +17,10 @@ _dropoff_cache = None
 _hourly_cache = None
 _daily_cache = None
 _payment_cache = None
+_heatmap_cache = None
+_tip_stats_cache = None
+_tip_by_borough_cache = None
+_zone_pickups_cache = None
 
 PAYMENT_TYPES = {
     1: "Credit Card",
@@ -38,7 +42,7 @@ def get_connection() -> duckdb.DuckDBPyConnection:
 
 def init_data():
     """Initialize data and cache on startup."""
-    global _stats_cache, _pickup_cache, _dropoff_cache, _hourly_cache, _daily_cache, _payment_cache
+    global _stats_cache, _pickup_cache, _dropoff_cache, _hourly_cache, _daily_cache, _payment_cache, _heatmap_cache, _tip_stats_cache, _tip_by_borough_cache, _zone_pickups_cache
     conn = get_connection()
 
     # Pre-cache stats
@@ -125,6 +129,77 @@ def init_data():
         }
         for row in payment_data
     ]
+
+    # Pre-cache heatmap data (hour x day of week)
+    heatmap_result = conn.execute(f"""
+        SELECT
+            EXTRACT(DAYOFWEEK FROM tpep_pickup_datetime) as day_of_week,
+            EXTRACT(HOUR FROM tpep_pickup_datetime) as hour,
+            COUNT(*) as trip_count
+        FROM '{DATA_PATH}'
+        GROUP BY day_of_week, hour
+        ORDER BY day_of_week, hour
+    """).fetchdf()
+    _heatmap_cache = heatmap_result.to_dict(orient="records")
+
+    # Pre-cache tip statistics (credit card only, exclude outliers > 100%)
+    tip_result = conn.execute(f"""
+        SELECT
+            AVG(tip_percentage) as avg_tip_percentage,
+            COUNT(*) as trip_count
+        FROM (
+            SELECT
+                (tip_amount / fare_amount) * 100 as tip_percentage
+            FROM '{DATA_PATH}'
+            WHERE payment_type = 1
+              AND fare_amount > 0
+              AND tip_amount >= 0
+              AND (tip_amount / fare_amount) <= 1.0
+        )
+    """).fetchone()
+    _tip_stats_cache = {
+        "avg_tip_percentage": round(tip_result[0], 1) if tip_result[0] else 0,
+        "trip_count": tip_result[1]
+    }
+
+    # Pre-cache tip percentage by borough
+    tip_borough_result = conn.execute(f"""
+        SELECT
+            z.Borough as borough,
+            AVG((t.tip_amount / t.fare_amount) * 100) as avg_tip_percentage,
+            COUNT(*) as trip_count
+        FROM '{DATA_PATH}' t
+        JOIN '{ZONE_LOOKUP_PATH}' z ON t.PULocationID = z.LocationID
+        WHERE t.payment_type = 1
+          AND t.fare_amount > 0
+          AND t.tip_amount >= 0
+          AND (t.tip_amount / t.fare_amount) <= 1.0
+          AND z.Borough NOT IN ('Unknown', 'EWR')
+        GROUP BY z.Borough
+        ORDER BY avg_tip_percentage DESC
+    """).fetchdf()
+    _tip_by_borough_cache = [
+        {
+            "borough": row["borough"],
+            "avg_tip_percentage": round(row["avg_tip_percentage"], 1),
+            "trip_count": int(row["trip_count"])
+        }
+        for _, row in tip_borough_result.iterrows()
+    ]
+
+    # Pre-cache all zone pickup counts for choropleth map
+    zone_pickups_result = conn.execute(f"""
+        SELECT
+            t.PULocationID as location_id,
+            z.Zone as zone_name,
+            z.Borough as borough,
+            COUNT(*) as trip_count
+        FROM '{DATA_PATH}' t
+        JOIN '{ZONE_LOOKUP_PATH}' z ON t.PULocationID = z.LocationID
+        GROUP BY t.PULocationID, z.Zone, z.Borough
+        ORDER BY trip_count DESC
+    """).fetchdf()
+    _zone_pickups_cache = zone_pickups_result.to_dict(orient="records")
 
 
 def get_data_info() -> dict:
@@ -296,3 +371,94 @@ def get_payment_breakdown() -> list[dict]:
         }
         for row in payment_data
     ]
+
+
+def get_heatmap_data() -> list[dict]:
+    """Get trip counts by hour and day of week for heatmap."""
+    if _heatmap_cache is not None:
+        return _heatmap_cache
+    conn = get_connection()
+    result = conn.execute(f"""
+        SELECT
+            EXTRACT(DAYOFWEEK FROM tpep_pickup_datetime) as day_of_week,
+            EXTRACT(HOUR FROM tpep_pickup_datetime) as hour,
+            COUNT(*) as trip_count
+        FROM '{DATA_PATH}'
+        GROUP BY day_of_week, hour
+        ORDER BY day_of_week, hour
+    """).fetchdf()
+    return result.to_dict(orient="records")
+
+
+def get_tip_stats() -> dict:
+    """Get average tip percentage for credit card payments (excluding outliers > 100%)."""
+    if _tip_stats_cache is not None:
+        return _tip_stats_cache
+    conn = get_connection()
+    result = conn.execute(f"""
+        SELECT
+            AVG(tip_percentage) as avg_tip_percentage,
+            COUNT(*) as trip_count
+        FROM (
+            SELECT
+                (tip_amount / fare_amount) * 100 as tip_percentage
+            FROM '{DATA_PATH}'
+            WHERE payment_type = 1
+              AND fare_amount > 0
+              AND tip_amount >= 0
+              AND (tip_amount / fare_amount) <= 1.0
+        )
+    """).fetchone()
+    return {
+        "avg_tip_percentage": round(result[0], 1) if result[0] else 0,
+        "trip_count": result[1]
+    }
+
+
+def get_tip_by_borough() -> list[dict]:
+    """Get average tip percentage by borough for credit card payments."""
+    if _tip_by_borough_cache is not None:
+        return _tip_by_borough_cache
+    conn = get_connection()
+    result = conn.execute(f"""
+        SELECT
+            z.Borough as borough,
+            AVG((t.tip_amount / t.fare_amount) * 100) as avg_tip_percentage,
+            COUNT(*) as trip_count
+        FROM '{DATA_PATH}' t
+        JOIN '{ZONE_LOOKUP_PATH}' z ON t.PULocationID = z.LocationID
+        WHERE t.payment_type = 1
+          AND t.fare_amount > 0
+          AND t.tip_amount >= 0
+          AND (t.tip_amount / t.fare_amount) <= 1.0
+          AND z.Borough NOT IN ('Unknown', 'EWR')
+        GROUP BY z.Borough
+        ORDER BY avg_tip_percentage DESC
+    """).fetchdf()
+    return [
+        {
+            "borough": row["borough"],
+            "avg_tip_percentage": round(row["avg_tip_percentage"], 1),
+            "trip_count": int(row["trip_count"])
+        }
+        for _, row in result.iterrows()
+    ]
+
+
+def get_zone_pickups() -> list[dict]:
+    """Get pickup counts for all zones (for choropleth map)."""
+    if _zone_pickups_cache is not None:
+        return _zone_pickups_cache
+    conn = get_connection()
+    result = conn.execute(f"""
+        SELECT
+            t.PULocationID as location_id,
+            z.Zone as zone_name,
+            z.Borough as borough,
+            COUNT(*) as trip_count
+        FROM '{DATA_PATH}' t
+        JOIN '{ZONE_LOOKUP_PATH}' z ON t.PULocationID = z.LocationID
+        GROUP BY t.PULocationID, z.Zone, z.Borough
+        ORDER BY trip_count DESC
+    """).fetchdf()
+    return result.to_dict(orient="records")
