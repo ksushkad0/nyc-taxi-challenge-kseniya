@@ -52,3 +52,50 @@ Each closed issue = points (see issue labels):
 You have access to Azure for deployment. Credentials will be provided separately.
 
 Good luck!
+
+---
+
+## Project Setup
+
+### Tech Stack
+- **Backend**: Python + FastAPI + DuckDB
+- **Frontend**: React + TypeScript + Vite
+
+### Folder Structure
+```
+├── backend/          # FastAPI backend
+│   ├── main.py       # API entry point
+│   └── requirements.txt
+├── frontend/         # React frontend
+│   ├── src/
+│   └── package.json
+├── venv/             # Python virtual environment
+└── DATA.md           # Data documentation
+```
+
+### Quick Start
+
+**1. Backend**
+```bash
+# Activate virtual environment
+source venv/bin/activate
+
+# Install dependencies (if needed)
+pip install -r backend/requirements.txt
+
+# Run the API server
+cd backend
+uvicorn main:app --reload --port 8000
+```
+API will be available at http://localhost:8000
+
+**2. Frontend**
+```bash
+# Install dependencies (if needed)
+cd frontend
+npm install
+
+# Run development server
+npm run dev
+```
+App will be available at http://localhost:5173
