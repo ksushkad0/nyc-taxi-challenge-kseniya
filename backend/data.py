@@ -72,3 +72,14 @@ def get_zone(location_id: int) -> Optional[dict]:
     """Map a LocationID to its Borough and Zone name."""
     lookup = get_zone_lookup()
     return lookup.get(location_id)
+
+
+def get_stats() -> dict:
+    """Get summary statistics for the dataset."""
+    conn = get_connection()
+    result = conn.execute(f"""
+        SELECT
+            COUNT(*) as total_trips
+        FROM '{DATA_URL}'
+    """).fetchone()
+    return {"total_trips": result[0]}
