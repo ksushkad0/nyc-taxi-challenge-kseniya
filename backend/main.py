@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from data import get_data_info
+
 app = FastAPI(title="NYC Taxi Analytics API")
 
 app.add_middleware(
@@ -20,3 +22,9 @@ def root():
 @app.get("/health")
 def health():
     return {"status": "healthy"}
+
+
+@app.get("/data/info")
+def data_info():
+    """Get basic information about the taxi dataset."""
+    return get_data_info()
