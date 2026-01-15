@@ -5,6 +5,7 @@ const API_URL = 'http://localhost:8000'
 
 interface Stats {
   total_trips: number
+  avg_fare: number
 }
 
 function App() {
@@ -28,6 +29,10 @@ function App() {
     return num.toLocaleString()
   }
 
+  const formatCurrency = (num: number) => {
+    return num.toLocaleString('en-US', { style: 'currency', currency: 'USD' })
+  }
+
   return (
     <div className="dashboard">
       <h1>NYC Taxi Analytics</h1>
@@ -37,6 +42,12 @@ function App() {
           <h3>Total Trips</h3>
           <p className="stat-value">
             {loading ? 'Loading...' : stats ? formatNumber(stats.total_trips) : 'Error'}
+          </p>
+        </div>
+        <div className="stat-card">
+          <h3>Average Fare</h3>
+          <p className="stat-value">
+            {loading ? 'Loading...' : stats ? formatCurrency(stats.avg_fare) : 'Error'}
           </p>
         </div>
       </div>
